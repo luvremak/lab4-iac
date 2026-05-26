@@ -1,0 +1,36 @@
+# Managed by Ansible — see roles/nginx/templates/nginx-mywebapp.conf.j2
+
+upstream mywebapp_backend {
+    server 127.0.0.1:{{ app_port }};
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    access_log /var/log/nginx/mywebapp_access.log;
+    error_log  /var/log/nginx/mywebapp_error.log;
+
+    # Root — HTML landing page only
+    location = / {
+        proxy_pass http://mywebapp_backend;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Business endpoints
+    location /items {
+        proxy_pass http://mywebapp_backend;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Everything else (including /health/*) is hidden from external clients.
+    location / {
+        return 404;
+    }
+}

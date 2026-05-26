@@ -1,0 +1,28 @@
+---
+# Main playbook for Lab 4.
+# Order of execution:
+#   1. common  — base system (users, sudoers, gradebook, firewall) on ALL hosts
+#   2. db hosts:     postgres role (install, create DB, restrict access)
+#   3. worker hosts: app + nginx (application + reverse proxy)
+#
+# The db role must run before the worker app role so the application has a DB
+# to connect to on its first start.
+
+- name: Base configuration (all hosts)
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: Database tier
+  hosts: db
+  become: true
+  roles:
+    - postgres
+
+- name: Application tier
+  hosts: workers
+  become: true
+  roles:
+    - app
+    - nginx

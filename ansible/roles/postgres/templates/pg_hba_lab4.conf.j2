@@ -1,0 +1,5 @@
+# Managed by Ansible — restricts {{ db_name }} access to the worker VM only.
+#
+# Format: TYPE  DATABASE         USER          ADDRESS                METHOD
+
+host    {{ db_name }}    {{ db_user }}    {{ worker_host_ip }}/32     scram-sha-256

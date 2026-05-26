@@ -1,0 +1,77 @@
+---
+# PostgreSQL role — installs PG, creates app DB+user, opens it ONLY to the
+# worker VM. The host's firewall (UFW) additionally blocks 5432 from anywhere
+# else, so we have defence in depth: pg_hba + UFW both restrict to the worker.
+
+- name: Install PostgreSQL and python driver
+  ansible.builtin.apt:
+    name:
+      - postgresql
+      - postgresql-contrib
+      - python3-psycopg2
+    state: present
+    update_cache: true
+
+- name: Detect PostgreSQL major version
+  ansible.builtin.shell:
+    cmd: "psql --version | awk '{print $3}' | awk -F. '{print $1}'"
+  register: pg_version_raw
+  changed_when: false
+
+- name: Set fact for config directory
+  ansible.builtin.set_fact:
+    pg_conf_dir: "/etc/postgresql/{{ pg_version_raw.stdout }}/main"
+
+- name: PostgreSQL service started and enabled
+  ansible.builtin.systemd:
+    name: postgresql
+    state: started
+    enabled: true
+
+# --- DB and user -------------------------------------------------------------
+- name: 'Database role {{ db_user }} present'
+  community.postgresql.postgresql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    role_attr_flags: LOGIN
+    state: present
+  become_user: postgres
+
+- name: 'Database {{ db_name }} present'
+  community.postgresql.postgresql_db:
+    name: "{{ db_name }}"
+    owner: "{{ db_user }}"
+    state: present
+  become_user: postgres
+
+# --- Listen on all interfaces ------------------------------------------------
+- name: postgresql.conf — listen_addresses = '*'
+  ansible.builtin.lineinfile:
+    path: "{{ pg_conf_dir }}/postgresql.conf"
+    regexp: "^#?listen_addresses\\s*="
+    line: "listen_addresses = '*'"
+    state: present
+  notify: restart postgresql
+
+# --- pg_hba — accept connections from worker VM only -------------------------
+# Use a labelled marker block so the rule is idempotent and removable.
+- name: pg_hba.conf — allow worker VM only (managed block)
+  ansible.builtin.blockinfile:
+    path: "{{ pg_conf_dir }}/pg_hba.conf"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK lab4"
+    block: |
+      # Lab 4: application connects from the worker VM only.
+      host    {{ db_name }}    {{ db_user }}    {{ worker_host_ip }}/32    scram-sha-256
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  notify: restart postgresql
+
+# --- UFW — allow worker only -------------------------------------------------
+- name: UFW — allow PostgreSQL from worker VM only
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ worker_host_ip }}"
+    to_port: "{{ db_port | string }}"
+    proto: tcp
+    comment: 'lab4: postgres from worker only'

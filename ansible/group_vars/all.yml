@@ -1,0 +1,27 @@
+---
+# Variables shared across all hosts. Variant N = 11, per Lab 1:
+#   * V2 = (11 % 2) + 1 = 2  -> TOML config + PostgreSQL
+#   * V3 = (11 % 3) + 1 = 3  -> Simple Inventory application
+#   * V5 = (11 % 5) + 1 = 2  -> application port 5200
+
+gradebook_number: 11
+
+# Database (used by both db and app roles)
+db_name: mywebapp
+db_user: mywebapp
+db_password: mywebapp_secret   # in production -> ansible-vault
+db_port: 5432
+
+# Application
+app_user: app
+app_port: 5200
+app_install_dir: /opt/mywebapp
+app_config_path: /etc/mywebapp/config.toml
+app_python_version: python3
+
+# Operator user — gets passwordless sudo only for the two restart commands.
+operator_user: operator
+
+# Shorthands resolved per-host.
+db_host_ip:     "{{ hostvars['db-vm'].ansible_host }}"
+worker_host_ip: "{{ hostvars['worker-vm'].ansible_host }}"

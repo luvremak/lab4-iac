@@ -1,0 +1,85 @@
+---
+# Base system configuration applied to every host.
+#
+# Responsibilities:
+#   * package cache up to date
+#   * core packages installed (curl, ufw, python-psycopg for ansible's postgres
+#     modules — needed on the db host)
+#   * application system user 'app' (no shell login, non-root)
+#   * operator's restricted sudoers (only systemctl restart for mywebapp/nginx)
+#   * /home/student/gradebook with the variant number N (per assignment)
+#   * UFW firewall enabled with a deny-all default; per-tier rules live in
+#     the postgres / nginx roles
+
+- name: Apt cache up to date
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ufw
+      - acl                # for become_user with non-priv targets
+      - python3-pip
+    state: present
+
+# --- 1) Application system user (present on both VMs for parity with Lab 1) --
+- name: System user '{{ app_user }}' present
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+
+# --- 2) student user + /home/student/gradebook --------------------------------
+- name: Regular user 'student' present
+  ansible.builtin.user:
+    name: student
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: '/home/student/gradebook contains the variant number'
+  ansible.builtin.copy:
+    content: "{{ gradebook_number }}\n"
+    dest: /home/student/gradebook
+    owner: student
+    group: student
+    mode: '0644'
+
+# --- 3) operator restricted sudoers -----------------------------------------
+# operator must NOT have full sudo. The cloud-init step did not grant it any,
+# and here we add a narrow sudoers fragment: only systemctl restart for the
+# two services the assignment lists.
+- name: operator sudoers fragment (restart mywebapp/nginx only)
+  ansible.builtin.template:
+    src: sudoers-operator.j2
+    dest: /etc/sudoers.d/operator
+    owner: root
+    group: root
+    mode: '0440'
+    validate: /usr/sbin/visudo -cf %s
+
+# --- 4) UFW firewall with deny-all default ----------------------------------
+- name: UFW — allow SSH from anywhere
+  community.general.ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+
+- name: UFW — default deny incoming
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: UFW — default allow outgoing
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: UFW — enable
+  community.general.ufw:
+    state: enabled

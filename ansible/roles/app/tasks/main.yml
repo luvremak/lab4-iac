@@ -1,0 +1,98 @@
+---
+# Application role — deploys the FastAPI inventory service on the worker VM.
+#
+# Mirrors the Lab 1 setup but with:
+#   * config.toml templated (DB host taken from the db VM's IP)
+#   * systemd unit installed via template instead of bash script
+
+- name: Python runtime and venv tools
+  ansible.builtin.apt:
+    name:
+      - python3
+      - python3-venv
+      - python3-pip
+    state: present
+    update_cache: true
+
+- name: 'Application install dir {{ app_install_dir }}'
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+
+- name: Application source — app/ package
+  ansible.builtin.copy:
+    src: app/
+    dest: "{{ app_install_dir }}/app/"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0644'
+    directory_mode: '0755'
+  notify: restart mywebapp
+
+- name: Application source — requirements.txt
+  ansible.builtin.copy:
+    src: requirements.txt
+    dest: "{{ app_install_dir }}/requirements.txt"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0644'
+  notify: restart mywebapp
+
+# --- Python virtualenv with deps --------------------------------------------
+- name: 'Python virtualenv at {{ app_install_dir }}/.venv'
+  ansible.builtin.pip:
+    requirements: "{{ app_install_dir }}/requirements.txt"
+    virtualenv: "{{ app_install_dir }}/.venv"
+    virtualenv_command: "{{ app_python_version }} -m venv"
+  become_user: "{{ app_user }}"
+
+# --- Templated config (DB host = db VM IP) ----------------------------------
+- name: '/etc/mywebapp directory'
+  ansible.builtin.file:
+    path: /etc/mywebapp
+    state: directory
+    owner: root
+    group: "{{ app_user }}"
+    mode: '0750'
+
+- name: 'Application config {{ app_config_path }}'
+  ansible.builtin.template:
+    src: config.toml.j2
+    dest: "{{ app_config_path }}"
+    owner: root
+    group: "{{ app_user }}"
+    mode: '0640'
+  notify: restart mywebapp
+
+# --- Run DB migration once (idempotent — schema_version table) --------------
+- name: Run database migration
+  ansible.builtin.command:
+    cmd: "{{ app_install_dir }}/.venv/bin/python -m app.migrate"
+    chdir: "{{ app_install_dir }}"
+  environment:
+    MYWEBAPP_CONFIG: "{{ app_config_path }}"
+  become_user: "{{ app_user }}"
+  register: migrate_result
+  changed_when: "'applied migration' in (migrate_result.stdout | default(''))"
+
+# --- systemd unit -----------------------------------------------------------
+- name: systemd unit file
+  ansible.builtin.template:
+    src: mywebapp.service.j2
+    dest: /etc/systemd/system/mywebapp.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - daemon-reload
+    - restart mywebapp
+
+- name: mywebapp service enabled and started
+  ansible.builtin.systemd:
+    name: mywebapp.service
+    state: started
+    enabled: true
+    daemon_reload: true

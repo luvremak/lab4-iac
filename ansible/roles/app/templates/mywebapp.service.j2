@@ -1,0 +1,24 @@
+[Unit]
+Description=mywebapp Simple Inventory service (Lab 4)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_install_dir }}
+Environment=MYWEBAPP_CONFIG={{ app_config_path }}
+ExecStart={{ app_install_dir }}/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port {{ app_port }}
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths={{ app_install_dir }}
+
+[Install]
+WantedBy=multi-user.target

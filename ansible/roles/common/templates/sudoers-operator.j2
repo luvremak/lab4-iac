@@ -1,0 +1,8 @@
+# Managed by Ansible — see roles/common/tasks/main.yml
+# operator: passwordless sudo for restarting the two managed services ONLY.
+
+{{ operator_user }} ALL=(root) NOPASSWD: \
+    /bin/systemctl restart mywebapp.service, \
+    /bin/systemctl restart nginx.service, \
+    /bin/systemctl status mywebapp.service, \
+    /bin/systemctl status nginx.service

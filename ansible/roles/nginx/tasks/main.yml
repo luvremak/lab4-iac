@@ -1,0 +1,50 @@
+---
+# nginx reverse proxy role — runs on the worker VM in front of the application.
+#
+# Exposes only / and /items to external clients (port 80). /health/* is
+# proxied for internal/operator use but not advertised; the assignment lists
+# both /health/alive and /health/ready as required endpoints, so they remain
+# accessible on the application port from inside the VM and we expose them
+# behind /internal/health/* via nginx for the same.
+
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+
+- name: Disable default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: mywebapp site config (templated)
+  ansible.builtin.template:
+    src: nginx-mywebapp.conf.j2
+    dest: /etc/nginx/sites-available/mywebapp
+    owner: root
+    group: root
+    mode: '0644'
+  notify: reload nginx
+
+- name: mywebapp site enabled
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/mywebapp
+    dest: /etc/nginx/sites-enabled/mywebapp
+    state: link
+  notify: reload nginx
+
+- name: nginx service started and enabled
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
+
+# --- UFW — expose only port 80 -----------------------------------------------
+- name: UFW — allow HTTP from anywhere
+  community.general.ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+    comment: 'lab4: nginx reverse proxy'
