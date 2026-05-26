@@ -147,7 +147,7 @@ ansible-playbook site.yml
 | /health/alive і /health/ready | endpoint-и доступні на 127.0.0.1:5200 (ready перевіряє підключення до БД) |
 | /home/student/gradebook = 11 | common role створює файл із N=11 |
 
-## Очистити середовище після здачі
+## Очистити середовище 
 
 ```bash
 cd terraform/
